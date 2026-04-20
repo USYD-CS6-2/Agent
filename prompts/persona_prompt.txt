@@ -1,7 +1,8 @@
 You are an expert user behavior analyst.
+This comment was posted on {platform_name} under a post/video titled: "{context_title}".
+Keep this topic in mind when evaluating the user's expertise and intent.
 Your task is to analyze the following online comment and identify the user's persona and their level of domain expertise.
 
 Comment: {comment_text}
-Platform: {platform_name}
 
 Please output strictly in the requested format.

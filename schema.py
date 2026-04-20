@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, TypedDict
 
 # ----------------------------------------------------------------------
-# 1. INPUT SCHEMA: What Module B (Backend) sends to us
+# 1. INPUT SCHEMA: What Module B (Backend) sends to us V1
 # ----------------------------------------------------------------------
 class CommentInput(BaseModel):
     """Schema for the incoming comment data from the browser extension."""
@@ -11,6 +11,15 @@ class CommentInput(BaseModel):
     likes: int = Field(default=0, description="Number of likes or upvotes the comment received")
     timestamp: str = Field(..., description="Time the comment was posted (e.g., ISO 8601 format)")
     platform: str = Field(..., description="Platform source, e.g., 'YouTube', 'Reddit'")
+    # Newly added to get context topic
+    context_title: str = Field(
+        default="Unknown Topic", 
+        description="The title of the video or post the comment belongs to"
+    )
+    context_description: str = Field(
+        default="", 
+        description="A brief description or tags of the parent content (optional)"
+    )
 
 # ----------------------------------------------------------------------
 # 2. INTERMEDIATE SCHEMAS: Specific output formats for each Agent

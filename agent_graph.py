@@ -93,6 +93,7 @@ def persona_node(state: GraphState):
     response = chain.invoke({
         "comment_text": input_data.text,
         "platform_name": input_data.platform,
+        "context_title": input_data.context_title,
         "format_instructions": parser.get_format_instructions()
     })
     
@@ -121,6 +122,7 @@ def sentiment_node(state: GraphState):
     response = chain.invoke({
         "comment_text": input_data.text,
         "platform_name": input_data.platform,
+        "context_title": input_data.context_title,
         "format_instructions": parser.get_format_instructions()
     })
     
