@@ -18,6 +18,7 @@ load_dotenv()
 llm = ChatOpenAI(
     api_key=os.getenv("MINIMAX_API_KEY"),
     base_url=os.getenv("MINIMAX_BASE_URL"),
+    # model="MiniMax-M2.7-highspeed",
     model="MiniMax-M2.7-highspeed",
     temperature=0.2 # Kept low for consistent analytical extraction
 )
@@ -178,8 +179,14 @@ workflow.add_node("sentiment_agent", sentiment_node)
 workflow.add_node("weighting_logic", weighting_node)
 
 # Define the routing edges (Linear sequence)
+# workflow.add_edge(START, "persona_agent")
+# workflow.add_edge("persona_agent", "sentiment_agent")
+# workflow.add_edge("sentiment_agent", "weighting_logic")
+# workflow.add_edge("weighting_logic", END)
+
 workflow.add_edge(START, "persona_agent")
-workflow.add_edge("persona_agent", "sentiment_agent")
+workflow.add_edge(START, "sentiment_agent")
+workflow.add_edge("persona_agent", "weighting_logic")
 workflow.add_edge("sentiment_agent", "weighting_logic")
 workflow.add_edge("weighting_logic", END)
 
