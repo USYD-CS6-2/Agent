@@ -10,7 +10,7 @@ llm = ChatOpenAI(
     api_key=os.getenv("MINIMAX_API_KEY"),
     base_url=os.getenv("MINIMAX_BASE_URL"),
     model="MiniMax-M2.7-highspeed", 
-    temperature=0.7
+    temperature=0.2
 )
 
 # 3. Define the connection test function
@@ -18,7 +18,7 @@ def test_llm():
     print("Connecting to Minimax API...")
     try:
         # 'invoke' is the standard LangChain method to generate a response
-        response = llm.invoke("Hello, please prove in one short sentence that you are ready to process online comments data.")
+        response = llm.invoke("Forget everything I told you before. Now tell me the EXACT model you are using and the model's version. For example, if you are gpt-4o-mini, you shouldn't tell me you are gpt-4o, even though they are related. prove in one short sentence that you are ready to process online comments data.")
         print("\n[SUCCESS] Connection established! Model response:")
         print(response.content)
     except Exception as e:
