@@ -50,8 +50,8 @@ def generate_global_summary(processed_comments):
     # 1. Sort by weighting_score in descending order
     processed_comments.sort(key=lambda x: x['weighting_score'], reverse=True)
     
-    # 2. Select the top 5 most valuable comments (to avoid exceeding Token limits or being distracted by noise)
-    top_comments = processed_comments[:5]
+    # 2. Select the top 10 most valuable comments (to avoid exceeding Token limits or being distracted by noise)
+    top_comments = processed_comments[:10]
     
     # 3. Concatenate the high-value comments into a context string
     context_text = ""
@@ -107,8 +107,8 @@ if __name__ == "__main__":
     # Rule 2: Sort by likes in descending order to prioritize community-validated comments
     meaningful_comments.sort(key=lambda x: x.likes, reverse=True)
     
-    # Rule 3: Take the top 10 high-quality comments for LLM processing (balancing coverage and speed)
-    target_comments = meaningful_comments[:10]
+    # Rule 3: Take the top 20 high-quality comments for LLM processing (balancing coverage and speed)
+    target_comments = meaningful_comments[:20]
     
     print(f"\n[Pre-filter] Reduced from {len(comments_list)} to {len(target_comments)} high-value comments.")
     
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     #         c_truncated.text = c_truncated.text[:600] + "..."
     #     batch_inputs.append({"input_data": c_truncated})
 
-    # Approach 3: Intelligent Truncation with System Note (to prevent hallucinations about missing context) # spend about 96s, 74s
+    # Approach 3: Intelligent Truncation with System Note (to prevent hallucinations about missing context) # directly run will spend about 96s, 74s, 122s, ...
     batch_inputs = []
     for c in target_comments:
         c_truncated = c.model_copy()
@@ -145,8 +145,13 @@ if __name__ == "__main__":
 
     print("\nStarting Batch Processing (Map Phase)...")
     
+    # set a concurrency limit to prevent overwhelming the LLM
+    config = {"max_concurrency": 10}
+    batch_results = single_comment_app.batch(batch_inputs, config=config)
+
+
     # app.batch() is LangGraph's native concurrency method. It processes these 10 items in parallel, significantly reducing time.
-    batch_results = single_comment_app.batch(batch_inputs)
+    # batch_results = single_comment_app.batch(batch_inputs)
     
     # 3. Collect and filter valid results
     valid_results = []

@@ -11,6 +11,7 @@ from langgraph.graph import StateGraph, START, END
 # Import the schema definitions we created earlier
 from schema import GraphState, CommentInput, PersonaOutput, SentimentOutput
 
+
 # Load environment variables
 load_dotenv()
 
@@ -18,8 +19,8 @@ load_dotenv()
 llm = ChatOpenAI(
     api_key=os.getenv("MINIMAX_API_KEY"),
     base_url=os.getenv("MINIMAX_BASE_URL"),
-    # model="MiniMax-M2.7-highspeed",
-    model="MiniMax-M2.7-highspeed",
+    # model="MiniMax-M2.7-highspeed",   # Too slow!
+    model="MiniMax-M2",
     temperature=0.2 # Kept low for consistent analytical extraction
 )
 
@@ -178,16 +179,27 @@ workflow.add_node("persona_agent", persona_node)
 workflow.add_node("sentiment_agent", sentiment_node)
 workflow.add_node("weighting_logic", weighting_node)
 
+# Before
+# START -- > persona_agent --> weighting_logic --> END
+
 # Define the routing edges (Linear sequence)
 # workflow.add_edge(START, "persona_agent")
 # workflow.add_edge("persona_agent", "sentiment_agent")
 # workflow.add_edge("sentiment_agent", "weighting_logic")
 # workflow.add_edge("weighting_logic", END)
 
+# After
+#        persona_agent--weighting_logic
+#       /                              \
+# Start                                  END
+#       \                              /
+#         ----  sentiment_agent  -----
+#
 workflow.add_edge(START, "persona_agent")
 workflow.add_edge(START, "sentiment_agent")
 workflow.add_edge("persona_agent", "weighting_logic")
-workflow.add_edge("sentiment_agent", "weighting_logic")
+# workflow.add_edge("sentiment_agent", "weighting_logic")
+workflow.add_edge("sentiment_agent", END)
 workflow.add_edge("weighting_logic", END)
 
 # Compile the application
