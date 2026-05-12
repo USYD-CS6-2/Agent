@@ -2,6 +2,7 @@ import json
 import os
 import re
 import time
+from typing import List, Dict, Any
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -20,37 +21,14 @@ llm = ChatOpenAI(
     temperature=0.4 # Slightly increase temperature for the summary task to make the language more natural
 )
 
-def load_reddit_data(filepath: str):
-    """Load data from a JSON file and convert it to a list of CommentInput objects"""
-    print(f"Loading data from {filepath}...")
-    with open(filepath, 'r', encoding='utf-8') as f:
-        raw_data = json.load(f)
-    
-    comments = []
-    for idx, item in enumerate(raw_data):
-        # Map JSON fields to our Schema
-        comment = CommentInput(
-            comment_id=f"reddit_{idx}",
-            text=item.get("text", ""),
-            likes=item.get("upvotes", 0),
-            timestamp=item.get("timestamp", "2026-01-01T00:00:00Z"),
-            platform="Reddit",
-            context_title=item.get("context_title", ""),
-            context_description=item.get("context_description", "")
-        )
-        comments.append(comment)
-    
-    print(f"Successfully loaded {len(comments)} comments.")
-    return comments
-
-def generate_global_summary(processed_comments):
+def generate_global_summary(processed_comments: List[Dict[str, Any]]) -> str:
     """Reduce Phase: Extract high-weight comments and generate a global summary"""
     print("\n[Global Summarizer] Generating final consensus...")
     
     # 1. Sort by weighting_score in descending order
     processed_comments.sort(key=lambda x: x['weighting_score'], reverse=True)
     
-    # 2. Select the top 10 most valuable comments (to avoid exceeding Token limits or being distracted by noise)
+    # 2. Select the top 10 most valuable comments
     top_comments = processed_comments[:10]
     
     # 3. Concatenate the high-value comments into a context string
@@ -58,13 +36,15 @@ def generate_global_summary(processed_comments):
     for idx, c in enumerate(top_comments):
         context_text += f"\n--- Comment {idx+1} (Weight: {c['weighting_score']}) ---\n"
         context_text += f"Persona: {c['persona_result'].persona_tags}\n"
-        context_text += f"Sentiment Score: {c['sentiment_result'].sentiment_score}\n"
-        context_text += f"Text: {c['input_data'].text[:200]}...\n" # Take only the first 200 characters to avoid excessive length
+        # Safely get sentiment score assuming your graph architecture handles it
+        if c.get('sentiment_result'):
+            context_text += f"Sentiment Score: {c['sentiment_result'].sentiment_score}\n"
+        context_text += f"Text: {c['input_data'].text[:200]}...\n"
     
-    # 4. Design the Prompt for the global summary --------------------This one needs to be set in a separate file in the prompts directory--------------------
+    # 4. Design the Prompt for the global summary
     summary_prompt = ChatPromptTemplate.from_template("""
     You are an expert community analyst. 
-    Below are the top most impactful and highly weighted comments from a Reddit discussion.
+    Below are the top most impactful and highly weighted comments from a discussion.
     
     {context_text}
     
@@ -75,58 +55,48 @@ def generate_global_summary(processed_comments):
     chain = summary_prompt | llm
     response = chain.invoke({"context_text": context_text})
     
-    # ----------- cleaning logic --------------
+    # 5. Cleaning logic
     raw_content = response.content
     # Use a regular expression to completely remove the <think>...</think> block and its contents
     clean_summary = re.sub(r'<think>.*?</think>', '', raw_content, flags=re.DOTALL).strip()
 
     return clean_summary
 
-# ==========================================
-# Main Execution Flow
-# ==========================================
-if __name__ == "__main__":
-
-    start = time.perf_counter()
-
-    # 1. Load data
-    # Ensure reddit_data_1774194099588.json is in your project's root directory
-    comments_list = load_reddit_data("reddit_data_1774194099588.json")
+def run_summarization(raw_json_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Core Entry Point for the API.
+    Executes the Map-Reduce pipeline on the provided list of raw comment dictionaries.
+    """
+    print(f"\n[Backend] Received {len(raw_json_data)} comments for processing.")
     
-    # #To test speed, we slice the first 10 comments for demonstration. You can remove this slice after successful testing.
-    # test_comments = comments_list[:10] 
+    # 1. Parse raw dictionaries into Pydantic models
+    comments_list = []
+    for idx, item in enumerate(raw_json_data):
+        comment = CommentInput(
+            comment_id=item.get("comment_id", f"comment_{idx}"),
+            text=item.get("text", item.get("content", "")),
+            likes=item.get("upvotes", item.get("likes", 0)),
+            timestamp=item.get("timestamp", "2026-01-01T00:00:00Z"),
+            platform=item.get("platform", "Unknown"),
+            context_title=item.get("context_title", ""),
+            context_description=item.get("context_description", "")
+        )
+        comments_list.append(comment)
     
-    # # 2. Prepare Batch inputs
-    # batch_inputs = [{"input_data": c} for c in test_comments]
+    print(f"[Backend] Successfully parsed {len(comments_list)} comment objects.")
 
-
-    # ----- Pre-filtering -----
+    # 2. Smart Pre-filtering
     # Rule 1: Filter out meaningless short comments with fewer than 10 characters
     meaningful_comments = [c for c in comments_list if len(c.text.strip()) > 10]
     
     # Rule 2: Sort by likes in descending order to prioritize community-validated comments
     meaningful_comments.sort(key=lambda x: x.likes, reverse=True)
     
-    # Rule 3: Take the top 20 high-quality comments for LLM processing (balancing coverage and speed)
+    # Rule 3: Take the top 20 high-quality comments for LLM processing
     target_comments = meaningful_comments[:20]
+    print(f"[Backend] Pre-filter: Reduced from {len(comments_list)} to {len(target_comments)} high-value comments.")
     
-    print(f"\n[Pre-filter] Reduced from {len(comments_list)} to {len(target_comments)} high-value comments.")
-    
-    # # 2. Prepare Batch inputs # spend about 90s to process 10 full comments
-    # batch_inputs = [{"input_data": c} for c in target_comments]
-
-    # # Approach 2: Truncate 600 characters   
-    # # spend about 110s. The increase in time is likely due to the model having to deal with incomplete sentences and trying to guess missing context.
-    # batch_inputs = []
-    # for c in target_comments:
-    #     # Create a truncated version of the comment for the input to avoid overwhelming the LLM, while keeping the original in the GraphState for reference. 
-    #     # This is a common technique to manage token limits while preserving context.
-    #     c_truncated = c.model_copy()
-    #     if len(c_truncated.text) > 600:
-    #         c_truncated.text = c_truncated.text[:600] + "..."
-    #     batch_inputs.append({"input_data": c_truncated})
-
-    # Approach 3: Intelligent Truncation with System Note (to prevent hallucinations about missing context) # directly run will spend about 96s, 74s, 122s, ...
+    # 3. Intelligent Truncation with System Note
     batch_inputs = []
     for c in target_comments:
         c_truncated = c.model_copy()
@@ -136,39 +106,65 @@ if __name__ == "__main__":
             # Find the last period (.) within the first 600 characters
             cut_point = raw_text.rfind('.', 0, 600)
             if cut_point == -1: 
-                cut_point = 600 # If no period is found, truncate at 600 characters
+                cut_point = 600 # Fallback
                 
             # Add a clear system note to interrupt the large model's trial of completion
             c_truncated.text = raw_text[:cut_point+1] + " [SYSTEM NOTE: The rest of the comment was truncated for brevity. Do NOT guess missing context.]"
             
         batch_inputs.append({"input_data": c_truncated})
 
-    print("\nStarting Batch Processing (Map Phase)...")
-    
-    # set a concurrency limit to prevent overwhelming the LLM
-    config = {"max_concurrency": 10}
+    # 4. Map Phase: Execute LangGraph Batch Processing
+    print("[Backend] Starting Batch Processing (Map Phase)...")
+    config = {"max_concurrency": 10} # Concurrency limit to prevent overwhelming the LLM
     batch_results = single_comment_app.batch(batch_inputs, config=config)
-
-
-    # app.batch() is LangGraph's native concurrency method. It processes these 10 items in parallel, significantly reducing time.
-    # batch_results = single_comment_app.batch(batch_inputs)
     
-    # 3. Collect and filter valid results
+    # 5. Collect and filter valid results
     valid_results = []
     for res in batch_results:
         # Ensure no fields are missing due to LLM hallucinations
-        if res.get('persona_result') and res.get('sentiment_result') and 'weighting_score' in res:
+        if res.get('persona_result') and 'weighting_score' in res:
             valid_results.append(res)
             
-    print(f"Processed {len(valid_results)} valid comments.")
+    print(f"[Backend] Processed {len(valid_results)} valid comments successfully.")
     
-    # 4. Generate the final summary (Reduce Phase)
-    final_summary = generate_global_summary(valid_results)
-    
-    end = time.perf_counter()
-    print(f"Processing Time: {end - start:.6f} seconds")
+    # 6. Reduce Phase: Generate the final summary
+    if len(valid_results) == 0:
+        return {
+            "status": "error",
+            "processed_count": 0,
+            "summary": "Failed to process any valid comments. Please check the input data or LLM connection."
+        }
 
-    print("\n==============================================")
-    print("FINAL GLOBAL SUMMARY")
-    print("==============================================")
-    print(final_summary)
+    final_summary = generate_global_summary(valid_results)
+    print("[Backend] Pipeline execution finished successfully.")
+    
+    return {
+        "status": "success",
+        "processed_count": len(valid_results),
+        "summary": final_summary
+    }
+
+# ==========================================
+# Main Execution Flow (For Local Testing Only)
+# ==========================================
+if __name__ == "__main__":
+    start = time.perf_counter()
+    
+    # Ensure this JSON file is in your project's root directory for local testing
+    test_filepath = "reddit_data_1774194099588.json"
+    
+    if os.path.exists(test_filepath):
+        print(f"Loading local test data from {test_filepath}...")
+        with open(test_filepath, 'r', encoding='utf-8') as f:
+            raw_data = json.load(f)
+            
+        result = run_summarization(raw_data)
+        
+        end = time.perf_counter()
+        print(f"\nTotal Processing Time: {end - start:.6f} seconds")
+        print("\n==============================================")
+        print("FINAL GLOBAL SUMMARY")
+        print("==============================================")
+        print(result.get("summary", "No summary generated."))
+    else:
+        print(f"[Error] Local test file '{test_filepath}' not found.")
