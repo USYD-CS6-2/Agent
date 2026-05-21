@@ -6,6 +6,7 @@ from typing import List, Dict, Any
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from datetime import datetime, timezone
 
 # Import the previously written modules
 from schema import CommentInput
@@ -29,7 +30,7 @@ def generate_global_summary(processed_comments: List[Dict[str, Any]]) -> str:
     processed_comments.sort(key=lambda x: x['weighting_score'], reverse=True)
     
     # 2. Select the top 10 most valuable comments
-    top_comments = processed_comments[:10]
+    top_comments = processed_comments[:5]
     
     # 3. Concatenate the high-value comments into a context string
     context_text = ""
@@ -67,6 +68,10 @@ def run_summarization(raw_json_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     Core Entry Point for the API.
     Executes the Map-Reduce pipeline on the provided list of raw comment dictionaries.
     """
+    utc_now = datetime.now(timezone.utc)
+    #formatted_utc = utc_now.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Generation time:", utc_now)
+    start = time.perf_counter()
     print(f"\n[Backend] Received {len(raw_json_data)} comments for processing.")
     
     # 1. Parse raw dictionaries into Pydantic models
@@ -93,7 +98,7 @@ def run_summarization(raw_json_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     meaningful_comments.sort(key=lambda x: x.likes, reverse=True)
     
     # Rule 3: Take the top 20 high-quality comments for LLM processing
-    target_comments = meaningful_comments[:20]
+    target_comments = meaningful_comments[:10]
     print(f"[Backend] Pre-filter: Reduced from {len(comments_list)} to {len(target_comments)} high-value comments.")
     
     # 3. Intelligent Truncation with System Note
@@ -115,7 +120,7 @@ def run_summarization(raw_json_data: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     # 4. Map Phase: Execute LangGraph Batch Processing
     print("[Backend] Starting Batch Processing (Map Phase)...")
-    config = {"max_concurrency": 10} # Concurrency limit to prevent overwhelming the LLM
+    config = {"max_concurrency": 5} # Concurrency limit to prevent overwhelming the LLM
     batch_results = single_comment_app.batch(batch_inputs, config=config)
     
     # 5. Collect and filter valid results
@@ -136,6 +141,9 @@ def run_summarization(raw_json_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         }
 
     final_summary = generate_global_summary(valid_results)
+    end = time.perf_counter()
+    print(f"\nTotal Processing Time: {end - start:.6f} seconds")
+    
     print("[Backend] Pipeline execution finished successfully.")
     
     return {
