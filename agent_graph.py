@@ -17,8 +17,9 @@ load_dotenv()
 
 # Initialize the Minimax model
 llm = ChatOpenAI(
-    api_key=os.getenv("MINIMAX_API_KEY"),
-    base_url=os.getenv("MINIMAX_BASE_URL"),
+    api_key=os.getenv("LLM_API_KEY"),
+    base_url=os.getenv("LLM_BASE_URL"),
+    # model = "Any model version, according to the your choice"
     # model="MiniMax-M2.7-highspeed",   # Too slow!
     model="MiniMax-M2",
     temperature=0.2 # Kept low for consistent analytical extraction
@@ -191,7 +192,7 @@ workflow.add_node("weighting_logic", weighting_node)
 # After
 #        persona_agent--weighting_logic
 #       /                              \
-# Start                                  END
+# Start                                  Summarizer
 #       \                              /
 #         ----  sentiment_agent  -----
 #

@@ -16,8 +16,9 @@ load_dotenv()
 
 # Initialize the model for the final global summary
 llm = ChatOpenAI(
-    api_key=os.getenv("MINIMAX_API_KEY"),
-    base_url=os.getenv("MINIMAX_BASE_URL"),
+    api_key=os.getenv("LLM_API_KEY"),
+    base_url=os.getenv("LLM_BASE_URL"),
+    # model = "Any model version, according to the your choice"
     model="MiniMax-M2.7-highspeed",
     temperature=0.4 # Slightly increase temperature for the summary task to make the language more natural
 )
@@ -90,14 +91,14 @@ def run_summarization(raw_json_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     
     print(f"[Backend] Successfully parsed {len(comments_list)} comment objects.")
 
-    # 2. Smart Pre-filtering
+    # 2. Pre-filtering
     # Rule 1: Filter out meaningless short comments with fewer than 10 characters
     meaningful_comments = [c for c in comments_list if len(c.text.strip()) > 10]
     
     # Rule 2: Sort by likes in descending order to prioritize community-validated comments
     meaningful_comments.sort(key=lambda x: x.likes, reverse=True)
     
-    # Rule 3: Take the top 20 high-quality comments for LLM processing
+    # Rule 3: Take the top 10 high-quality comments for LLM processing
     target_comments = meaningful_comments[:10]
     print(f"[Backend] Pre-filter: Reduced from {len(comments_list)} to {len(target_comments)} high-value comments.")
     
@@ -159,6 +160,7 @@ if __name__ == "__main__":
     start = time.perf_counter()
     
     # Ensure this JSON file is in your project's root directory for local testing
+    # test_filepath = "Add a json file to test locally"
     test_filepath = "reddit_data_1774194099588.json"
     
     if os.path.exists(test_filepath):
